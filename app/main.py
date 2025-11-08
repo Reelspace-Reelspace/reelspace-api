@@ -135,6 +135,6 @@ async def wave_webhook(request: Request):
 @app.get("/healthz")
 def healthz():
     return {"ok": True}
-from .db import init_db
+
 
 
