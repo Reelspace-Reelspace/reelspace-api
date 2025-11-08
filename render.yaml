@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: reelspace-api
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PLEX_TOKEN
+        sync: false
+      - key: PLEX_SERVER_NAME
+        sync: false
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: GOOGLE_SHEET_ID
+        sync: false
+      - key: SHARED_WEBHOOK_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DEFAULT_PLAN_PRICE
+        value: "7.00"
+      - key: DEFAULT_PLAN_NAME
+        value: "Standard"
