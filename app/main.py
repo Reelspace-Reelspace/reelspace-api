@@ -135,3 +135,6 @@ async def wave_webhook(request: Request):
 @app.get("/healthz")
 def healthz():
     return {"ok": True}
+from .db import init_db
+
+init_db()  # Create tables if they do not exist
