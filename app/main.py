@@ -46,7 +46,7 @@ async def wave_webhook(request: Request):
     #   "provider_event_id": "...",
     #   "email": "user@example.com",
     #   "full_name": "Full Name",
-    #   "amount": 7.00,
+    #   "amount": 9.00,
     #   "currency": "USD",
     #   "period_start": "2025-11-01",
     #   "period_end": "2025-12-01",
