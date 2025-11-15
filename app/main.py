@@ -12,6 +12,42 @@ DEFAULT_PLAN_PRICE = float(os.getenv("DEFAULT_PLAN_PRICE","7.00"))
 DEFAULT_PLAN_NAME = os.getenv("DEFAULT_PLAN_NAME","Standard")
 
 app = FastAPI(title="ReelSpace Automation API", version="0.1.0")
+# ----------------------------------------------------
+# DEBUG ROUTES – TO TEST GOOGLE SHEETS CONNECTIVITY
+# ----------------------------------------------------
+
+@app.get("/debug/sheets")
+def debug_sheets():
+    """List worksheet tabs to confirm Google Sheets connection."""
+    sh = sheets.get_sheet()
+    worksheets = [ws.title for ws in sh.worksheets()]
+    return {"worksheets": worksheets}
+
+
+@app.post("/debug/add-demo-user")
+def add_demo_user():
+    """Append a demo row to Google Sheets to verify writing works."""
+    row = [
+        "u_demo_api",                   # user_id
+        "demo_api@example.com",         # email
+        "Demo User From API",           # full_name
+        "DemoPlexUser",                 # plex_username
+        "",                             # referral_code_used
+        "active",                       # status
+        "2025-11-15",                   # join_date
+        "2025-11-15",                   # last_paid_date
+        "2025-12-15",                   # next_due_date
+        "Standard",                     # plan
+        7,                              # monthly_price
+        0,                              # credits_balance
+        "sent",                         # plex_invite_status
+        "",                             # plex_account_id
+        "Created via API test"          # notes
+    ]
+
+    sheets.append_row("user_id", row)
+    return {"status": "row added"}
+
 
 @app.on_event("startup")
 def _startup():
