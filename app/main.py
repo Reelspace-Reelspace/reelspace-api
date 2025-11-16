@@ -80,6 +80,67 @@ def upsert_user(conn, email: str, full_name: str | None):
     row = conn.execute(text("SELECT user_id, credits_balance, plex_invite_status FROM users WHERE email=:e"), dict(e=email)).mappings().first()
     return row
 
+# ---------- Signup payload & endpoint (from Wave / checkout) ----------
+
+class SignupFromWave(BaseModel):
+    email: EmailStr
+    first_name: str
+    last_name: str | None = None
+
+
+@app.post("/signup/from-wave")
+async def signup_from_wave(payload: SignupFromWave):
+    """
+    Create/update a user after successful checkout and add them to Google Sheets.
+    """
+    full_name = payload.first_name
+    if payload.last_name:
+        full_name = f"{payload.first_name} {payload.last_name}"
+
+    # 1) Upsert into database
+    with engine.begin() as conn:
+        user_row = upsert_user(conn, payload.email, full_name)
+        user_id = user_row["user_id"]
+
+    # 2) Send Plex invite
+    plex_status = "pending"
+    try:
+        invite_user(payload.email, full_name)
+        plex_status = "sent"
+    except Exception as e:
+        plex_status = f"error: {e.__class__.__name__}"
+
+    # 3) Append into Google Sheet (user_id tab)
+    sh = sheets.get_sheet()
+    ws = sh.worksheet("user_id")
+
+    today = datetime.utcnow().date().isoformat()
+
+    row = [
+        user_id,                     # user_id
+        payload.email,               # email
+        full_name,                   # full_name
+        "",                          # plex_username
+        "",                          # referral_code_used
+        "active",                    # status
+        today,                       # join_date
+        today,                       # first_payment_date
+        "",                          # next_bill_date
+        DEFAULT_PLAN_NAME,           # plan
+        str(DEFAULT_PLAN_PRICE),     # monthly_price
+        "0",                         # credits_balance
+        plex_status,                 # plex_invite_status
+        "Created via Wave checkout", # notes
+    ]
+
+    ws.append_row(row, value_input_option="USER_ENTERED")
+
+    return {
+        "status": "ok",
+        "user_id": user_id,
+        "plex_invite_status": plex_status
+    }
+
 @app.post("/webhooks/wave")
 async def wave_webhook(request: Request):
     raw = await request.body()
