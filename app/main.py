@@ -3,12 +3,15 @@ from datetime import datetime
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import text
 
 from .db import engine, init_db
 from .plex_service import invite_user
 from . import sheets
+
+
 
 
 SHARED_WEBHOOK_SECRET = os.getenv("SHARED_WEBHOOK_SECRET", "")
