@@ -232,9 +232,9 @@ async def wave_webhook(request: Request):
         # Append to Google Sheets (best-effort)
         try:
             sheets.append_row("Payments", [
-                datetime.datetime.utcnow().isoformat(),
-                email, amount, currency, provider_event_id, period_start, period_end, idempotency_key, "ok"
-            ])
+    datetime.utcnow().isoformat(),
+    email, amount, currency, provider_event_id, period_start, period_end, idempotency_key, "ok"
+])
         except Exception as _:
             pass
         conn.execute(text("""
