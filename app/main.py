@@ -28,13 +28,21 @@ WAVE_CHECKOUT_URL = os.getenv(
 app = FastAPI(title="ReelSpace Automation API", version="0.1.0")
 
 # Allow your Weebly site (and localhost for testing) to call this API
+# Allow your join page + localhost
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],        # TEMP: allow any origin
+    allow_origins=[
+        "https://reelspace.watch",
+        "https://www.reelspace.watch",
+        "https://reelspace.pages.dev",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 
 # Public endpoint your join page can call to fetch checkout info
