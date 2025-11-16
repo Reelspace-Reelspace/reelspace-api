@@ -254,14 +254,25 @@ async def wave_webhook(request: Request):
                     VALUES(:iid, :uid, :email, :server, NOW(), 'error', :msg, 1)
                 """), dict(iid=f"i_{uuid.uuid4().hex[:10]}", uid=user_id, email=email,
                              server=os.getenv("PLEX_SERVER_NAME",""), msg=str(ex)))
-        # Append to Google Sheets (best-effort)
+                # Append to Google Sheets (best-effort)
         try:
-            sheets.append_row("Payments", [
-    datetime.utcnow().isoformat(),
-    email, amount, currency, provider_event_id, period_start, period_end, idempotency_key, "ok"
-])
+            sheets.append_row(
+                "Payments",
+                [
+                    datetime.utcnow().isoformat(),
+                    email,
+                    amount,
+                    currency,
+                    provider_event_id,
+                    period_start,
+                    period_end,
+                    idempotency_key,
+                    "ok",
+                ],
+            )
         except Exception as _:
             pass
+
         conn.execute(text("""
             INSERT INTO audit_log(event, user_id, email, details)
             VALUES('payment_processed', :uid, :email, :details)
