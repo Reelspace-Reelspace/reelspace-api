@@ -27,6 +27,9 @@ WAVE_CHECKOUT_URL = os.getenv(
 
 from fastapi.middleware.cors import CORSMiddleware
 
+app = FastAPI(title="ReelSpace Automation API", version="0.1.0")
+
+# CORS – allow your join site(s) to call the API
 origins = [
     "https://reelspace.watch",
     "https://www.reelspace.watch",
@@ -37,11 +40,12 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,      # only allow these sites
-    allow_credentials=False,    # we aren't sending cookies/auth headers
-    allow_methods=["*"],        # allow all methods (GET, POST, OPTIONS, ...)
-    allow_headers=["*"],        # allow all headers
+    allow_origins=origins,      # only these sites
+    allow_credentials=False,    # we're not using cookies/auth headers
+    allow_methods=["*"],        # allow GET, POST, OPTIONS, ...
+    allow_headers=["*"],        # allow any headers
 )
+
 
 
 
