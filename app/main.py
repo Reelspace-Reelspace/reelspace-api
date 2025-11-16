@@ -25,10 +25,8 @@ WAVE_CHECKOUT_URL = os.getenv(
 )
 
 
-app = FastAPI(title="ReelSpace Automation API", version="0.1.0")
+from fastapi.middleware.cors import CORSMiddleware
 
-# Allow your Weebly site (and localhost for testing) to call this API
-# Allow your join page + localhost
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -42,6 +40,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 
 
