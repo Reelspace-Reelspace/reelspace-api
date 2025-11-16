@@ -11,9 +11,16 @@ from .plex_service import invite_user
 from . import sheets
 
 
-SHARED_WEBHOOK_SECRET = os.getenv("SHARED_WEBHOOK_SECRET","")
-DEFAULT_PLAN_PRICE = float(os.getenv("DEFAULT_PLAN_PRICE","7.00"))
-DEFAULT_PLAN_NAME = os.getenv("DEFAULT_PLAN_NAME","Standard")
+SHARED_WEBHOOK_SECRET = os.getenv("SHARED_WEBHOOK_SECRET", "")
+DEFAULT_PLAN_PRICE = float(os.getenv("DEFAULT_PLAN_PRICE", "9.00"))
+DEFAULT_PLAN_NAME = os.getenv("DEFAULT_PLAN_NAME", "Standard")
+
+# Public Wave checkout link – safe to expose
+WAVE_CHECKOUT_URL = os.getenv(
+    "WAVE_CHECKOUT_URL",
+    "https://link.waveapps.com/kbsw8p-n6f972"
+)
+
 
 app = FastAPI(title="ReelSpace Automation API", version="0.1.0")
 # ----------------------------------------------------
