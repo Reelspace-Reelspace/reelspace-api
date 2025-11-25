@@ -97,3 +97,33 @@ def revoke_user(email: str) -> bool:
     except Exception:
         # If they're already gone (or never accepted), just treat as success.
         return False
+        
+def debug_connection():
+    """Return basic info about Plex account + servers for debugging."""
+    info = {}
+    try:
+        account = _get_account()
+        info["account"] = {
+            "username": getattr(account, "username", None),
+            "email": getattr(account, "email", None),
+        }
+
+        resources = []
+        for r in account.resources():
+            resources.append({
+                "name": r.name,
+                "provides": r.provides,
+            })
+        info["resources"] = resources
+
+        try:
+            resource = _get_server_resource(account)
+            info["server_found"] = True
+            info["server_name"] = resource.name
+        except Exception as e:
+            info["server_found"] = False
+            info["server_error"] = str(e)
+
+        return {"ok": True, **info}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
