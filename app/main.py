@@ -200,14 +200,16 @@ async def signup_from_wave(payload: SignupFromWave):
         "user_id": user_id,
         "plex_invite_status": plex_status,
     }
-    
+
 @app.post("/webhooks/wave")
 async def wave_webhook(request: Request):
     raw = await request.body()
-    sig = request.headers.get("X-Signature","")
+    sig = request.headers.get("X-Signature", "")
     if not verify_signature(raw, sig):
         raise HTTPException(status_code=401, detail="Invalid signature")
+
     payload = await request.json()
+
     # Expecting a normalized structure from Pipedream/Make:
     # {
     #   "event_type": "payment_succeeded",
@@ -220,96 +222,187 @@ async def wave_webhook(request: Request):
     #   "period_end": "2025-12-01",
     #   "referral_code": "REF-ABC123" (optional)
     # }
+
     event_type = payload.get("event_type")
     if event_type != "payment_succeeded":
         return JSONResponse({"ok": True, "ignored": True})
+
     provider_event_id = payload["provider_event_id"]
     email = payload["email"].lower()
-    full_name = payload.get("full_name","")
+    full_name = payload.get("full_name", "")
     amount = float(payload.get("amount", 0))
-    currency = payload.get("currency","USD")
+    currency = payload.get("currency", "USD")
     period_start = payload.get("period_start")
     period_end = payload.get("period_end")
     referral_code = payload.get("referral_code")
     idempotency_key = f"{email}-{period_start}"
+
     with engine.begin() as conn:
         # Upsert user
         u = upsert_user(conn, email, full_name)
         user_id = u["user_id"]
+
         # Insert payment if not exists (idempotent)
-        conn.execute(text("""
-            INSERT INTO payments(payment_id, user_id, email, amount, currency, provider, provider_event_id,
-                                 paid_at, period_start, period_end, status, idempotency_key, raw_payload)
-            VALUES(:pid, :uid, :email, :amount, :currency, 'Wave', :peid, NOW(),
-                   :ps, :pe, 'succeeded', :ikey, CAST(:raw AS JSONB))
-            ON CONFLICT (provider_event_id) DO NOTHING
-        """), dict(pid=f"p_{uuid.uuid4().hex[:10]}", uid=user_id, email=email, amount=amount, currency=currency,
-                     peid=provider_event_id, ps=period_start, pe=period_end, ikey=idempotency_key, raw=json.dumps(payload)))
+        conn.execute(
+            text(
+                """
+                INSERT INTO payments(
+                    payment_id, user_id, email, amount, currency, provider,
+                    provider_event_id, paid_at, period_start, period_end,
+                    status, idempotency_key, raw_payload
+                )
+                VALUES(
+                    :pid, :uid, :email, :amount, :currency, 'Wave',
+                    :peid, NOW(), :ps, :pe,
+                    'succeeded', :ikey, CAST(:raw AS JSONB)
+                )
+                ON CONFLICT (provider_event_id) DO NOTHING
+                """
+            ),
+            dict(
+                pid=f"p_{uuid.uuid4().hex[:10]}",
+                uid=user_id,
+                email=email,
+                amount=amount,
+                currency=currency,
+                peid=provider_event_id,
+                ps=period_start,
+                pe=period_end,
+                ikey=idempotency_key,
+                raw=json.dumps(payload),
+            ),
+        )
+
         # Update user paid dates
-        conn.execute(text("""
-            UPDATE users SET last_paid_date = NOW(), next_due_date = (NOW() + INTERVAL '30 days')
-            WHERE email=:e
-        """), dict(e=email))
-        # Handle referral credit (simple: $2 credit once at signup)
+        conn.execute(
+            text(
+                """
+                UPDATE users
+                SET last_paid_date = NOW(),
+                    next_due_date  = (NOW() + INTERVAL '30 days')
+                WHERE email = :e
+                """
+            ),
+            dict(e=email),
+        )
+
+        # Handle referral credit
         if referral_code:
-            # credit only if not already credited for this referred email
-            exists = conn.execute(text("""
-                SELECT 1 FROM referrals WHERE code=:c AND referred_email=:e LIMIT 1
-            """), dict(c=referral_code, e=email)).first()
+            exists = conn.execute(
+                text(
+                    """
+                    SELECT 1 FROM referrals
+                    WHERE code = :c AND referred_email = :e
+                    LIMIT 1
+                    """
+                ),
+                dict(c=referral_code, e=email),
+            ).first()
+
             if not exists:
-                conn.execute(text("""
-                    INSERT INTO referrals(referrer_email, referrer_user_id, code, referred_email,
-                                          credited_amount, credit_status, credited_at, note)
-                    VALUES('', '', :c, :e, 2.00, 'credited', NOW(), 'Signup credit')
-                """), dict(c=referral_code, e=email))
-                conn.execute(text("""
-                    UPDATE users SET credits_balance = COALESCE(credits_balance,0) + 2.00 WHERE email=:e
-                """), dict(e=email))
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO referrals(
+                            referrer_email, referrer_user_id, code, referred_email,
+                            credited_amount, credit_status, credited_at, note
+                        )
+                        VALUES(
+                            '', '', :c, :e, 2.00, 'credited', NOW(), 'Signup credit'
+                        )
+                        """
+                    ),
+                    dict(c=referral_code, e=email),
+                )
+
+                conn.execute(
+                    text(
+                        """
+                        UPDATE users
+                        SET credits_balance = COALESCE(credits_balance, 0) + 2.00
+                        WHERE email = :e
+                        """
+                    ),
+                    dict(e=email),
+                )
+
         # Decide if we should (re)send Plex invite — using the new plex_service.py logic
-invite_needed = True
-if u["plex_invite_status"] in ("sent", "accepted"):
-    invite_needed = False
+        invite_needed = True
+        if u["plex_invite_status"] in ("sent", "accepted"):
+            invite_needed = False
 
-if invite_needed:
-    try:
-        status = invite_user(email, full_name)
-        conn.execute(text("""
-            INSERT INTO invites(invite_id, user_id, email, plex_server, sent_at, status, attempts)
-            VALUES(:iid, :uid, :email, :server, NOW(), :status, 1)
-        """), dict(
-            iid=f"i_{uuid.uuid4().hex[:10]}",
-            uid=user_id,
-            email=email,
-            server=os.getenv("PLEX_SERVER_NAME", ""),
-            status=status
-        ))
+        if invite_needed:
+            try:
+                status = invite_user(email, full_name)
 
-        conn.execute(text("""
-            UPDATE users SET plex_invite_status=:status WHERE email=:email
-        """), dict(email=email, status=status))
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO invites(
+                            invite_id, user_id, email, plex_server,
+                            sent_at, status, attempts
+                        )
+                        VALUES(
+                            :iid, :uid, :email, :server,
+                            NOW(), :status, 1
+                        )
+                        """
+                    ),
+                    dict(
+                        iid=f"i_{uuid.uuid4().hex[:10]}",
+                        uid=user_id,
+                        email=email,
+                        server=os.getenv("PLEX_SERVER_NAME", ""),
+                        status=status,
+                    ),
+                )
 
-    except Exception as ex:
-        conn.execute(text("""
-            INSERT INTO invites(invite_id, user_id, email, plex_server, sent_at, status, error_message, attempts)
-            VALUES(:iid, :uid, :email, :server, NOW(), 'error', :msg, 1)
-        """), dict(
-            iid=f"i_{uuid.uuid4().hex[:10]}",
-            uid=user_id,
-            email=email,
-            server=os.getenv("PLEX_SERVER_NAME", ""),
-            msg=str(ex)
-        ))
+                conn.execute(
+                    text(
+                        """
+                        UPDATE users
+                        SET plex_invite_status = :status
+                        WHERE email = :email
+                        """
+                    ),
+                    dict(email=email, status=status),
+                )
 
-        conn.execute(text("""
-            UPDATE users SET plex_invite_status='error' WHERE email=:email
-        """), dict(email=email))
             except Exception as ex:
-                conn.execute(text("""
-                    INSERT INTO invites(invite_id, user_id, email, plex_server, sent_at, status, error_message, attempts)
-                    VALUES(:iid, :uid, :email, :server, NOW(), 'error', :msg, 1)
-                """), dict(iid=f"i_{uuid.uuid4().hex[:10]}", uid=user_id, email=email,
-                             server=os.getenv("PLEX_SERVER_NAME",""), msg=str(ex)))
-                # Append to Google Sheets (best-effort)
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO invites(
+                            invite_id, user_id, email, plex_server,
+                            sent_at, status, error_message, attempts
+                        )
+                        VALUES(
+                            :iid, :uid, :email, :server,
+                            NOW(), 'error', :msg, 1
+                        )
+                        """
+                    ),
+                    dict(
+                        iid=f"i_{uuid.uuid4().hex[:10]}",
+                        uid=user_id,
+                        email=email,
+                        server=os.getenv("PLEX_SERVER_NAME", ""),
+                        msg=str(ex),
+                    ),
+                )
+
+                conn.execute(
+                    text(
+                        """
+                        UPDATE users
+                        SET plex_invite_status = 'error'
+                        WHERE email = :email
+                        """
+                    ),
+                    dict(email=email),
+                )
+
+        # Append payment row to Google Sheets (best-effort)
         try:
             sheets.append_row(
                 "Payments",
@@ -325,18 +418,27 @@ if invite_needed:
                     "ok",
                 ],
             )
-        except Exception as _:
+        except Exception:
             pass
 
-        conn.execute(text("""
-            INSERT INTO audit_log(event, user_id, email, details)
-            VALUES('payment_processed', :uid, :email, :details)
-        """), dict(uid=user_id, email=email, details=f"amount={amount}, invite={'yes' if invite_needed else 'no'}"))
+        # Audit log
+        conn.execute(
+            text(
+                """
+                INSERT INTO audit_log(event, user_id, email, details)
+                VALUES('payment_processed', :uid, :email, :details)
+                """
+            ),
+            dict(
+                uid=user_id,
+                email=email,
+                details=f"amount={amount}, invite={'yes' if invite_needed else 'no'}",
+            ),
+        )
+
     return {"ok": True, "user": email, "invite_sent": invite_needed}
+
 
 @app.get("/healthz")
 def healthz():
     return {"ok": True}
-
-
-
