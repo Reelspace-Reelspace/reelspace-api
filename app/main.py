@@ -34,16 +34,17 @@ origins = [
     "https://reelspace.watch",
     "https://www.reelspace.watch",
     "https://reelspace.pages.dev",
+    "https://reelspace-api-1.onrender.com",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,      # only these sites
-    allow_credentials=False,    # we're not using cookies/auth headers
-    allow_methods=["*"],        # allow GET, POST, OPTIONS, ...
-    allow_headers=["*"],        # allow any headers
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
