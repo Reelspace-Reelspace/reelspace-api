@@ -81,25 +81,29 @@ def debug_sheets():
 @app.post("/debug/add-demo-user")
 def add_demo_user():
     """Append a demo row to Google Sheets to verify writing works."""
+    sh = sheets.get_sheet()
+    ws = sh.worksheet("Users")
+
     row = [
         "u_demo_api",                   # user_id
         "demo_api@example.com",         # email
         "Demo User From API",           # full_name
-        "DemoPlexUser",                 # plex_username
+        "",                             # plex_username
         "",                             # referral_code_used
         "active",                       # status
         "2025-11-15",                   # join_date
         "2025-11-15",                   # last_paid_date
-        "2025-12-15",                   # next_due_date
+        "",                             # next_due_date
         "Standard",                     # plan
-        7,                              # monthly_price
+        9,                              # monthly_price
         0,                              # credits_balance
         "sent",                         # plex_invite_status
         "",                             # plex_account_id
-        "Created via API test"          # notes
+        "Created via API test",         # notes
     ]
 
-    sheets.append_row("user_id", row)
+    print("Writing DEBUG user to sheet:", ws.title)
+    ws.append_row(row, value_input_option="USER_ENTERED")
     return {"status": "row added"}
 
 
@@ -136,6 +140,7 @@ async def signup_from_wave(payload: SignupFromWave):
     """
     Create/update a user after successful checkout and add them to Google Sheets.
     """
+    # Build full name
     full_name = payload.first_name
     if payload.last_name:
         full_name = f"{payload.first_name} {payload.last_name}"
@@ -153,38 +158,43 @@ async def signup_from_wave(payload: SignupFromWave):
     except Exception as e:
         plex_status = f"error: {e.__class__.__name__}"
 
-    # 3) Append into Google Sheet (user_id tab)
+    # 3) Append into Google Sheet (Users tab)
     sh = sheets.get_sheet()
     ws = sh.worksheet("Users")
 
-today = datetime.utcnow().date().isoformat()
+    today = datetime.utcnow().date().isoformat()
 
-row = [
-    user_id,                     # user_id (A)
-    payload.email,               # email (B)
-    full_name,                   # full_name (C)
-    "",                          # plex_username (D)
-    "",                          # referral_code_used (E)
-    "active",                    # status (F)
-    today,                       # join_date (G)
-    today,                       # last_paid_date (H)
-    "",                          # next_due_date (I)
-    DEFAULT_PLAN_NAME,           # plan (J)
-    str(DEFAULT_PLAN_PRICE),     # monthly_price (K)
-    "0",                         # credits_balance (L)
-    plex_status,                 # plex_invite_status (M)
-    "",                          # plex_account_id (N)
-    "Created via Wave checkout", # notes (O)
-]
+    # Must match Users sheet headers:
+    # user_id | email | full_name | plex_username | referral_code_used |
+    # status | join_date | last_paid_date | next_due_date | plan |
+    # monthly_price | credits_balance | plex_invite_status | plex_account_id | notes
+    row = [
+        user_id,                     # user_id
+        payload.email,               # email
+        full_name,                   # full_name
+        "",                          # plex_username
+        "",                          # referral_code_used
+        "active",                    # status
+        today,                       # join_date
+        today,                       # last_paid_date
+        "",                          # next_due_date
+        DEFAULT_PLAN_NAME,           # plan
+        str(DEFAULT_PLAN_PRICE),     # monthly_price
+        "0",                         # credits_balance
+        plex_status,                 # plex_invite_status
+        "",                          # plex_account_id
+        "Created via Wave checkout", # notes
+    ]
 
+    print("Writing signup to sheet:", ws.title)
     ws.append_row(row, value_input_option="USER_ENTERED")
 
     return {
         "status": "ok",
         "user_id": user_id,
-        "plex_invite_status": plex_status
+        "plex_invite_status": plex_status,
     }
-
+    
 @app.post("/webhooks/wave")
 async def wave_webhook(request: Request):
     raw = await request.body()
