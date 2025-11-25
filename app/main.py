@@ -150,11 +150,10 @@ async def signup_from_wave(payload: SignupFromWave):
         user_row = upsert_user(conn, payload.email, full_name)
         user_id = user_row["user_id"]
 
-    # 2) Send Plex invite
+    # 2) Send Plex invite using new invite_user helper
     plex_status = "pending"
     try:
-        invite_user(payload.email, full_name)
-        plex_status = "sent"
+        plex_status = invite_user(payload.email, full_name)  # 'sent' | 'already_shared' | 'already_invited'
     except Exception as e:
         plex_status = f"error: {e.__class__.__name__}"
 
@@ -259,21 +258,44 @@ async def wave_webhook(request: Request):
                 conn.execute(text("""
                     UPDATE users SET credits_balance = COALESCE(credits_balance,0) + 2.00 WHERE email=:e
                 """), dict(e=email))
-        # Decide if we should (re)send Plex invite
-        invite_needed = True
-        if u["plex_invite_status"] in ("sent","accepted"):
-            invite_needed = False
-        if invite_needed:
-            try:
-                invite_user(email)
-                conn.execute(text("""
-                    INSERT INTO invites(invite_id, user_id, email, plex_server, sent_at, status, attempts)
-                    VALUES(:iid, :uid, :email, :server, NOW(), 'sent', 1)
-                """), dict(iid=f"i_{uuid.uuid4().hex[:10]}", uid=user_id, email=email,
-                             server=os.getenv("PLEX_SERVER_NAME","")))
-                conn.execute(text("""
-                    UPDATE users SET plex_invite_status='sent' WHERE email=:e
-                """), dict(e=email))
+        # Decide if we should (re)send Plex invite — using the new plex_service.py logic
+invite_needed = True
+if u["plex_invite_status"] in ("sent", "accepted"):
+    invite_needed = False
+
+if invite_needed:
+    try:
+        status = invite_user(email, full_name)
+        conn.execute(text("""
+            INSERT INTO invites(invite_id, user_id, email, plex_server, sent_at, status, attempts)
+            VALUES(:iid, :uid, :email, :server, NOW(), :status, 1)
+        """), dict(
+            iid=f"i_{uuid.uuid4().hex[:10]}",
+            uid=user_id,
+            email=email,
+            server=os.getenv("PLEX_SERVER_NAME", ""),
+            status=status
+        ))
+
+        conn.execute(text("""
+            UPDATE users SET plex_invite_status=:status WHERE email=:email
+        """), dict(email=email, status=status))
+
+    except Exception as ex:
+        conn.execute(text("""
+            INSERT INTO invites(invite_id, user_id, email, plex_server, sent_at, status, error_message, attempts)
+            VALUES(:iid, :uid, :email, :server, NOW(), 'error', :msg, 1)
+        """), dict(
+            iid=f"i_{uuid.uuid4().hex[:10]}",
+            uid=user_id,
+            email=email,
+            server=os.getenv("PLEX_SERVER_NAME", ""),
+            msg=str(ex)
+        ))
+
+        conn.execute(text("""
+            UPDATE users SET plex_invite_status='error' WHERE email=:email
+        """), dict(email=email))
             except Exception as ex:
                 conn.execute(text("""
                     INSERT INTO invites(invite_id, user_id, email, plex_server, sent_at, status, error_message, attempts)
