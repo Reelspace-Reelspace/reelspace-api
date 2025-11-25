@@ -155,26 +155,27 @@ async def signup_from_wave(payload: SignupFromWave):
 
     # 3) Append into Google Sheet (user_id tab)
     sh = sheets.get_sheet()
-    ws = sh.worksheet("user_id")
+    ws = sh.worksheet("Users")
 
-    today = datetime.utcnow().date().isoformat()
+today = datetime.utcnow().date().isoformat()
 
-    row = [
-        user_id,                     # user_id
-        payload.email,               # email
-        full_name,                   # full_name
-        "",                          # plex_username
-        "",                          # referral_code_used
-        "active",                    # status
-        today,                       # join_date
-        today,                       # first_payment_date
-        "",                          # next_bill_date
-        DEFAULT_PLAN_NAME,           # plan
-        str(DEFAULT_PLAN_PRICE),     # monthly_price
-        "0",                         # credits_balance
-        plex_status,                 # plex_invite_status
-        "Created via Wave checkout", # notes
-    ]
+row = [
+    user_id,                     # user_id (A)
+    payload.email,               # email (B)
+    full_name,                   # full_name (C)
+    "",                          # plex_username (D)
+    "",                          # referral_code_used (E)
+    "active",                    # status (F)
+    today,                       # join_date (G)
+    today,                       # last_paid_date (H)
+    "",                          # next_due_date (I)
+    DEFAULT_PLAN_NAME,           # plan (J)
+    str(DEFAULT_PLAN_PRICE),     # monthly_price (K)
+    "0",                         # credits_balance (L)
+    plex_status,                 # plex_invite_status (M)
+    "",                          # plex_account_id (N)
+    "Created via Wave checkout", # notes (O)
+]
 
     ws.append_row(row, value_input_option="USER_ENTERED")
 
