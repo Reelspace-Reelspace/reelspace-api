@@ -8,7 +8,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import text
 
 from .db import engine, init_db
-from .plex_service import invite_user
+from .plex_service import invite_user, debug_connection
 from . import sheets
 
 
@@ -77,7 +77,14 @@ def debug_sheets():
     worksheets = [ws.title for ws in sh.worksheets()]
     return {"worksheets": worksheets}
 
-
+@app.get("/debug/plex")
+def debug_plex():
+    """
+    Debug Plex connectivity: shows account info and available servers.
+    Does NOT expose your token.
+    """
+    return debug_connection()
+    
 @app.post("/debug/add-demo-user")
 def add_demo_user():
     """Append a demo row to Google Sheets to verify writing works."""
